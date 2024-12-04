@@ -1,0 +1,130 @@
+/*
+* Calculator program Ver 0.1
+* 작성자 : 신예랑
+* 내  용: 계산기 프로그램 ver 0.1(C++스타일 코딩)
+* 운영체제 : 리눅스
+* 클라이언트
+*/
+
+#include<iostream>
+#include<cstdlib>
+#include<cstring>
+#include<unistd.h>
+#include<arpa/inet.h>
+#include<sys/socket.h>
+#define BUF_SIZE 100
+using namespace std;
+
+void error_handling(const char* msg)
+{
+        fputs(msg, stderr);
+        fputc('\n', stderr);
+        exit(1);
+}
+
+class opinfo
+{
+public:
+        int opnd_cnt;
+        int num1[BUF_SIZE];
+        double num2[BUF_SIZE];
+        int result1;
+        double result2;
+        char op;
+
+public:
+        opinfo(int _opnd_cnt = 0, int _num1[] = 0, double _num2[] = 0, int result1 = 0, int result2 = 0, char _op = 0)
+                : opnd_cnt(_opnd_cnt), result1(result1), result2(result2), op(_op)
+        {
+                if (_op == '/')
+                {
+                        for (int i = 0; i < _opnd_cnt; i++)
+                                num2[i] = _num2[i];
+                }
+                else
+                {
+                        for (int i = 0; i < _opnd_cnt; i++)
+                                num1[i] = _num1[i];
+                }
+        }
+        double GetDoubleResult() const { return result2; }
+        int GetIntResult() const { return result1; }
+};
+
+int main(int argc, char* argv[])
+{
+        int sock, i, opnd_cnt;
+        struct sockaddr_in serv_addr;
+        char op;
+        int num[BUF_SIZE];
+        double div_num[BUF_SIZE];
+
+        if (argc != 3)
+        {
+                printf("Usage : %s <IP> <Port> \n", argv[0]);
+                exit(1);
+        }
+
+        sock = socket(PF_INET, SOCK_STREAM, 0);
+        if (sock == -1)
+                error_handling("socket() error");
+
+        memset(&serv_addr, 0, sizeof(serv_addr));
+        serv_addr.sin_family = AF_INET;
+        serv_addr.sin_addr.s_addr = inet_addr(argv[1]);
+        serv_addr.sin_port = htons(atoi(argv[2]));
+
+        if (connect(sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) == -1)
+                error_handling("connect() error");
+
+        cout << "Operand count : ";
+        cin >> opnd_cnt;
+
+        cout << "Operator : ";
+        cin >> op;
+
+        if (op != '+' && op != '-' && op != '*' && op != '/')
+                error_handling("error_input_operator___program_end");
+
+        if (op == '/')
+        {
+                for (i=0; i<opnd_cnt; i++)
+                {
+                        cout << "Operand : ";
+                        cin >> div_num[i];
+                }
+
+                opinfo person(opnd_cnt, 0, div_num, 0, 0, op);
+
+                if (write(sock, &person, sizeof(person)) == -1)
+                        error_handling("write() error");
+
+                if (read(sock, &person, sizeof(person)) == -1)
+                        error_handling("read() error");
+
+                cout << "Operation result : " <<  person.GetDoubleResult() << endl;
+        }
+
+        else
+        {
+                for (i=0; i<opnd_cnt; i++)
+                {
+                        cout << "Operand : ";
+                        cin >> num[i];
+                }
+
+                opinfo person(opnd_cnt, num, 0, 0, 0, op);
+
+                if (write(sock, &person, sizeof(person)) == -1)
+                        error_handling("write() error");
+
+                if (read(sock, &person, sizeof(person)) == -1)
+                        error_handling("read() error");
+
+                cout << "Operation result : " << person.GetIntResult() << endl;
+        }
+
+        close(sock);
+
+        return 0;
+}
