@@ -1,0 +1,192 @@
+/*
+* Calculator program Ver 0.1
+* 작성자 : 신예랑
+* 내  용: 계산기 프로그램 ver 0.1(C++스타일 코딩)
+* 운영체제 : 리눅스
+* 서버
+*/
+
+#include<iostream>
+#include<cstdlib>
+#include<cstring>
+#include<unistd.h>
+#include<arpa/inet.h>
+#include<sys/socket.h>
+#include<signal.h>
+#include<sys/wait.h>
+#define BUF_SIZE 100
+
+void error_handling(const char* message)
+{
+        fputs(message, stderr);
+        fputc('\n', stderr);
+        exit(1);
+}
+
+void mychild(int sig)
+{
+        if (SIGCHLD == sig)
+        {
+                int st;
+                pid_t wp = waitpid(-1, &st, WNOHANG);
+
+                // waitpid() error
+                if (!WIFEXITED(st))
+                        error_handling("child die error");
+
+                printf("[Disconnected Client ID : %d\n", wp);
+        }
+        else
+                error_handling("child die nope");
+}
+
+class opinfo
+{
+    int opnd_cnt;       // 계산할 숫자의 갯수
+    int num1[BUF_SIZE];  // 입력받은 숫자들
+    double num2[BUF_SIZE]; // '' (실수)
+    int result1;         // 결과 값
+    double result2;      // 결과 값
+    char op;      // 연산자
+
+public:
+    opinfo(int opnd_cnt = 0, int int_num[BUF_SIZE] = NULL, double div_num[BUF_SIZE] = NULL, int result1 = 0, int result2 = 0, char op = 0)
+        : opnd_cnt(opnd_cnt), result1(result1), result2(result2), op(op)
+    {
+        if (op == '/')
+            for (int i = 0; i < opnd_cnt; i++)
+                num2[i] = div_num[i];
+        else
+            for (int i = 0; i < opnd_cnt; i++)
+                num1[i] = int_num[i];
+    }
+
+    void Cal()
+    {
+        int i;
+        result1 = num1[0];
+
+        for (i = 1; i < opnd_cnt; i++)
+        {
+            switch (op)
+            {
+            case '+':
+                result1 += num1[i];
+                break;
+            case '-':
+                result1 -= num1[i];
+                break;
+            case '*':
+                result1 *= num1[i];
+                break;
+            }
+        }
+    }
+
+    void div_Cal()
+    {
+        int i;
+        result2 = num2[0];
+
+        for (i = 1; i < opnd_cnt; i++)
+            result2 /= num2[i];
+    }
+
+    char GetOp() const { return op; }
+};
+
+int main(int argc, char* argv[])
+{
+        int serv_sock, clnt_sock;
+        pid_t pid;
+        struct sockaddr_in serv_addr;
+        struct sockaddr_in clnt_addr;
+        socklen_t clnt_addr_size;
+
+        if (argc != 2)
+        {
+                printf("Usage : %s <port> \n", argv[0]);
+                exit(1);
+                        }
+
+        serv_sock = socket(PF_INET, SOCK_STREAM, 0);
+        if (serv_sock == -1)
+                error_handling("socket() error!");
+
+        memset(&serv_addr, 0, sizeof(serv_addr));
+        serv_addr.sin_family = AF_INET;
+        serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+        serv_addr.sin_port = htons(atoi(argv[1]));
+
+        if (bind(serv_sock, (struct sockaddr*) &serv_addr, sizeof(serv_addr)) == -1)
+                error_handling("bind() error");
+
+        if (listen(serv_sock, 5) == -1)
+                error_handling("listen() error");
+
+        clnt_addr_size = sizeof(clnt_addr);
+
+        struct sigaction a;
+        a.sa_flags = SA_RESTART;
+        sigemptyset(&a.sa_mask);
+        a.sa_handler = mychild;
+
+        // sigaction() & error
+        if(sigaction(SIGCHLD, &a, 0) == -1)
+                printf("sigaction() error");
+
+        struct opinfo person;
+
+        printf("\n");
+        while(1)
+        {
+                // accept() & error
+                clnt_sock = accept(serv_sock, (struct sockaddr*)&clnt_addr, &clnt_addr_size);
+                if (clnt_sock == -1)
+                        error_handling("accept() error");
+
+                // fork()
+                pid = fork();
+
+                // fork() error
+                if (pid == -1)
+                        error_handling("fork() error");
+                // Child
+                else if (pid == 0)
+                {
+                        close(serv_sock);
+
+                        opinfo person;
+
+                        if (read(clnt_sock, &person, sizeof(person)) == -1)
+                                error_handling("read() error");
+
+                        if (person.GetOp() == '/')
+                        {
+                                person.div_Cal();
+
+                                if (write(clnt_sock, &person, sizeof(person)) == -1)
+                                        error_handling("write() error");
+                        }
+
+                        else
+                        {
+                                person.Cal();
+
+                                if (write(clnt_sock, &person, sizeof(person)) == -1)
+                                        error_handling("write() error");
+                        }
+
+                        close(clnt_sock);
+                        exit(1);
+                }
+                // Parent
+                printf("[Connected client %d] \n", pid);
+                close(clnt_sock);
+        }
+
+        printf("finish!!!!!\n");
+        close(serv_sock);
+
+        return 0;
+}
