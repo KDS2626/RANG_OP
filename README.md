@@ -1,2 +1,2 @@
 # 계산기 프로젝트(콘솔 출력)
-# Windows/Linux 환경 둘 다 가능
+# 기술 스택 : C/C++, Socket, Windows, Linux, Visual Studio, Vim
